@@ -758,6 +758,48 @@ class BankModel(MappingModel):
         super(BankModel, self).__init__(radio, name)
 
 
+class StaticBank(Bank):
+    pass
+
+
+class StaticBankModel(BankModel):
+    MSG = 'This radio has fixed banks and does not allow reassignment'
+    channelAlwaysHasBank = True
+
+    """A BankModel that shows a static mapping but does not allow changes."""
+    def __init__(self, radio, name='Banks', banks=10):
+        super().__init__(radio, name=name)
+        self._num_banks = banks
+        self._rf = radio.get_features()
+        self._banks = []
+        for i in range(self._num_banks):
+            self._banks.append(StaticBank(self, i + 1, 'Bank'))
+
+    def get_num_mappings(self):
+        return self._num_banks
+
+    def get_mappings(self):
+        return self._banks
+
+    def get_mapping_memories(self, bank):
+        lo, hi = self._rf.memory_bounds
+        count = (hi - lo + 1) / self._num_banks
+        offset = lo + ((bank.get_index() - 1) * count)
+        return [self._radio.get_memory(offset + i) for i in range(count)]
+
+    def get_memory_mappings(self, memory):
+        lo, hi = self._rf.memory_bounds
+        mems = hi - lo + 1
+        count = mems // self._num_banks
+        return [self._banks[(memory.number - lo) // count]]
+
+    def remove_memory_from_mapping(self, memory, mapping):
+        raise NotImplementedError(self.MSG)
+
+    def add_memory_to_mapping(self, memory, mapping):
+        raise NotImplementedError(self.MSG)
+
+
 class MappingModelIndexInterface:
     """Interface for mappings with index capabilities"""
 
@@ -814,6 +856,10 @@ def LIST(v):
     assert hasattr(v, '__iter__')
 
 
+def LIST_NONZERO_INT(v):
+    assert all(x > 0 for x in v)
+
+
 def INT(min=0, max=None):
     def checkint(v):
         assert isinstance(v, int)
@@ -865,7 +911,7 @@ class RadioFeatures:
         "valid_modes":          LIST,
         "valid_tmodes":         LIST,
         "valid_duplexes":       LIST,
-        "valid_tuning_steps":   LIST,
+        "valid_tuning_steps":   LIST_NONZERO_INT,
         "valid_bands":          LIST,
         "valid_skips":          LIST,
         "valid_power_levels":   LIST,
@@ -1572,8 +1618,11 @@ class CloneModeRadio(FileBackedRadio, ExternalMemoryProperties,
         rf = self.get_features()
         if not rf.has_comment and isinstance(memory.number, int):
             self._metadata.setdefault('mem_extra', {})
-            memory.comment = self._metadata['mem_extra'].get(
-                '%04i_comment' % memory.number, '')
+            try:
+                memory.comment = self._metadata['mem_extra'].get(
+                    '%04i_comment' % memory.number, '')
+            except ImmutableValueError:
+                pass
         return memory
 
     def set_memory_extra(self, memory):
@@ -1733,12 +1782,32 @@ def required_step(freq, allowed=None):
         8.33: is_8_33,
     }
 
+    # Try the above "standard" steps first in order
+    required_step = None
     for step, validate in steps.items():
         if step in allowed and validate(freq):
             return step
+        elif validate(freq) and required_step is None:
+            required_step = step
 
-    raise errors.InvalidDataError("Unable to find a supported " +
-                                  "tuning step for %s" % format_freq(freq))
+    # Try any additional steps in the allowed list
+    for step in allowed:
+        if step in steps:
+            # Already tried
+            continue
+        if make_is(int(step * 1000))(freq):
+            LOG.debug('Chose non-standard step %s for %s' % (
+                step, format_freq(freq)))
+            return step
+
+    if required_step is not None:
+        raise errors.InvalidDataError((
+            'Frequency %s requires step %.2f, '
+            'which is not supported') % (
+                format_freq(freq), required_step))
+    else:
+        raise errors.InvalidDataError("Unable to find a supported " +
+                                      "tuning step for %s" % format_freq(freq))
 
 
 def fix_rounded_step(freq):
@@ -2060,3 +2129,11 @@ def mem_to_text(mem):
         elif mode == 'DTCS':
             pieces.append('D%03i' % tone)
     return '[%s]' % '/'.join(pieces)
+
+
+def in_range(freq, ranges):
+    """Check if freq is in any of the provided ranges"""
+    for lo, hi in ranges:
+        if lo <= freq <= hi:
+            return True
+    return False

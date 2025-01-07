@@ -503,6 +503,11 @@ class TestStepFunctions(base.BaseTest):
         self.assertEqual(2.5, chirp_common.required_step(self._005[0],
                                                          allowed=[2.5]))
 
+    def test_required_step_finds_radio_specific(self):
+        # Make sure we find a radio-specific step, 10Hz in this case
+        self.assertEqual(0.01, chirp_common.required_step(
+            146000010, allowed=[5.0, 10.0, 0.01, 20.0]))
+
     def test_required_step_fail(self):
         self.assertRaises(errors.InvalidDataError,
                           chirp_common.required_step,
@@ -755,6 +760,12 @@ class TestCloneModeExtras(base.BaseTest):
 class TestOverrideRules(base.BaseTest):
     # You should not need to add your radio to this list. If you think you do,
     # please ask permission first.
+    # Immutable fields should really only be used for cases where the value
+    # is not changeable based on the *location* of the memory. If something
+    # is forced to be a value based on the *content* of the memory (i.e. AM
+    # for frequencies in airband), coerce them on set/get, and return a
+    # ValidationWarning in validate_memory() so the user is told that the
+    # values are being forced.
     IMMUTABLE_WHITELIST = [
         # Uncomment me when the time comes
         'Baofeng_GT-5R',
@@ -765,11 +776,6 @@ class TestOverrideRules(base.BaseTest):
         'BTECH_MURS-V2',
         'Radioddity_DB25-G',
         'Retevis_RB17P',
-        'Baofeng_UV-17ProGPS',
-        'Baofeng_5RM',
-        'Baofeng_K5-Plus',
-        'Radtel_RT-730',
-        'TIDRADIO_TD-H8-HAM',
     ]
 
     def _test_radio_override_immutable_policy(self, rclass):

@@ -206,6 +206,17 @@ MEM_SETTINGS_FORMAT = """
     unknown8:1;
     } scan_settings_1;
 
+    struct bank_aux {
+      u8 unknown1;
+      u8 max_bank;
+      u8 unknown2;
+      u8 unknown3;
+    };
+    #seekto 0x654;
+    struct bank_aux bank_aux1;
+    #seekto 0x6D4;
+    struct bank_aux bank_aux2;
+
     #seekto 0x06B6;
     struct {
     u8 unknown1:3,
@@ -344,7 +355,7 @@ DUPLEX = ["", "-", "+", "split"]
 
 MODES = ["FM", "AM", "NFM"]
 
-STEPS = [0, 5, 6.25, 10, 12.5, 15, 20, 25, 50, 100]  # 0 = auto
+STEPS = [5, 6.25, 0, 10, 12.5, 15, 20, 25, 50, 100]  # 0 = auto?
 RFSQUELCH = ["OFF", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]
 
 SKIPS = ["", "S", "P"]
@@ -417,13 +428,30 @@ class FT70BankModel(chirp_common.BankModel):
         for index in range(empty, len(_members.channel)):
             _members.channel[index] = 0xFFFF
 
+        max_bank = -1
+        for index, bank in enumerate(self._radio._memobj.bank_used):
+            if int(bank.in_use) != 0xFFFF:
+                max_bank = max(max_bank, index)
+        LOG.debug('Determined max bank to be %i', max_bank)
+        if max_bank == -1:
+            self._radio._memobj.bank_aux1.fill_raw(b'\xFF')
+            self._radio._memobj.bank_aux2.fill_raw(b'\xFF')
+        else:
+            self._radio._memobj.bank_aux1.fill_raw(b'\x00')
+            self._radio._memobj.bank_aux2.fill_raw(b'\x00')
+            self._radio._memobj.bank_aux1.max_bank = max_bank
+            self._radio._memobj.bank_aux2.max_bank = max_bank
+
     def add_memory_to_mapping(self, memory, bank):
         channels_in_bank = self._channel_numbers_in_bank(bank)
         channels_in_bank.add(memory.number)
-        self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         _bank_used = self._radio._memobj.bank_used[bank.index]
         _bank_used.in_use = 0x06
+        self._update_bank_with_channel_numbers(bank, channels_in_bank)
+        # ~0x655 changes? Highest zero-origin bank used?
+        # First bank used 0x654-0x657 goes FF -> 00
+        # Also change 0x6d5 to match?
 
     def remove_memory_from_mapping(self, memory, bank):
         channels_in_bank = self._channel_numbers_in_bank(bank)
@@ -432,11 +460,11 @@ class FT70BankModel(chirp_common.BankModel):
         except KeyError:
             raise Exception("Memory %i is not in bank %s. Cannot remove" %
                             (memory.number, bank))
-        self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
         if not channels_in_bank:
             _bank_used = self._radio._memobj.bank_used[bank.index]
             _bank_used.in_use = 0xFFFF
+        self._update_bank_with_channel_numbers(bank, channels_in_bank)
 
     def get_mapping_memories(self, bank):
         memories = []
@@ -565,11 +593,11 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         rf.valid_modes = list(MODES)
         rf.valid_tmodes = list(TMODES)
         rf.valid_duplexes = list(DUPLEX)
-        rf.valid_tuning_steps = list(STEPS)
+        rf.valid_tuning_steps = [x for x in STEPS if x]
         rf.valid_bands = [(500000, 999900000)]
         rf.valid_skips = SKIPS
         rf.valid_power_levels = POWER_LEVELS
-        rf.valid_characters = "".join(CHARSET)
+        rf.valid_characters = "".join(CHARSET).upper()
         rf.valid_name_length = 6
         rf.memory_bounds = (1, 900)
         rf.can_odd_split = True
@@ -730,20 +758,20 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._DTMF_MODE,
-            self._DTMF_MODE[dtmf.dtmf_mode])
+            current_index=dtmf.dtmf_mode)
         rs = RadioSetting("scan_settings.dtmf_mode", "DTMF Mode", val)
         menu.append(rs)
 
         val = RadioSettingValueList(
             self._DTMF_DELAY,
-            self._DTMF_DELAY[dtmf.dtmf_delay])
+            current_index=dtmf.dtmf_delay)
         rs = RadioSetting(
             "scan_settings.dtmf_delay", "DTMF Delay", val)
         menu.append(rs)
 
         val = RadioSettingValueList(
             self._DTMF_SPEED,
-            self._DTMF_SPEED[dtmf.dtmf_speed])
+            current_index=dtmf.dtmf_speed)
         rs = RadioSetting(
             "scan_settings.dtmf_speed", "DTMF Speed", val)
         menu.append(rs)
@@ -776,20 +804,20 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._LAMP_KEY,
-            self._LAMP_KEY[scan_settings.lamp])
+            current_index=scan_settings.lamp)
         rs = RadioSetting("scan_settings.lamp", "Lamp", val)
         menu.append(rs)
 
         val = RadioSettingValueList(
             self._LCD_DIMMER,
-            self._LCD_DIMMER[scan_settings.lcd_dimmer])
+            current_index=scan_settings.lcd_dimmer)
         rs = RadioSetting("scan_settings.lcd_dimmer", "LCD Dimmer", val)
         menu.append(rs)
 
         opening_message = self._memobj.opening_message
         val = RadioSettingValueList(
             self._OPENING_MESSAGE,
-            self._OPENING_MESSAGE[opening_message.flag])
+            current_index=opening_message.flag)
         rs = RadioSetting("opening_message.flag", "Opening Msg Mode", val)
         menu.append(rs)
 
@@ -804,7 +832,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         first_settings = self._memobj.first_settings
         val = RadioSettingValueList(
             self._APO_SELECT,
-            self._APO_SELECT[first_settings.apo])
+            current_index=first_settings.apo)
         rs = RadioSetting("first_settings.apo", "APO", val)
         menu.append(rs)
 
@@ -812,7 +840,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.bclo])
+            current_index=scan_settings.bclo)
         rs = RadioSetting("scan_settings.bclo", "Busy Channel Lockout", val)
         menu.append(rs)
 
@@ -821,7 +849,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         beep_settings = self._memobj.beep_settings
         val = RadioSettingValueList(
             self._BEEP_SELECT,
-            self._BEEP_SELECT[beep_settings.beep_select])
+            current_index=beep_settings.beep_select)
         rs = RadioSetting("beep_settings.beep_select", "Beep", val)
         menu.append(rs)
 
@@ -829,7 +857,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._BEEP_LEVEL,
-            self._BEEP_LEVEL[beep_settings.beep_level])
+            current_index=beep_settings.beep_level)
         rs = RadioSetting("beep_settings", "Beep Level", val)
         menu.append(rs)
 
@@ -837,7 +865,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.beep_edge])
+            current_index=scan_settings.beep_edge)
         rs = RadioSetting("scan_settings.beep_edge", "Beep Band Edge", val)
         menu.append(rs)
 
@@ -845,7 +873,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._ON_OFF,
-            self._ON_OFF[scan_settings.busy_led])
+            current_index=scan_settings.busy_led)
         rs = RadioSetting("scan_settings.busy_led", "Busy LED", val)
         menu.append(rs)
 
@@ -853,7 +881,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._HOME_REV,
-            self._HOME_REV[scan_settings.home_rev])
+            current_index=scan_settings.home_rev)
         rs = RadioSetting("scan_settings.home_rev", "HOME/REV", val)
         menu.append(rs)
 
@@ -861,7 +889,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.home_vfo])
+            current_index=scan_settings.home_vfo)
         rs = RadioSetting("scan_settings.home_vfo", "Home->VFO", val)
         menu.append(rs)
 
@@ -869,7 +897,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._LOCK,
-            self._LOCK[scan_settings.lock])
+            current_index=scan_settings.lock)
         rs = RadioSetting("scan_settings.lock", "Lock Mode", val)
         menu.append(rs)
 
@@ -877,7 +905,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._MONI_TCALL,
-            self._MONI_TCALL[scan_settings.moni])
+            current_index=scan_settings.moni)
         rs = RadioSetting("scan_settings.moni", "MONI/T-CALL", val)
         menu.append(rs)
 
@@ -885,7 +913,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._PTT_DELAY,
-            self._PTT_DELAY[scan_settings.ptt_delay])
+            current_index=scan_settings.ptt_delay)
         rs = RadioSetting("scan_settings.ptt_delay", "PTT Delay", val)
         menu.append(rs)
 
@@ -893,7 +921,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.ars])
+            current_index=scan_settings.ars)
         rs = RadioSetting("scan_settings.ars", "ARS", val)
         menu.append(rs)
 
@@ -901,7 +929,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._RX_SAVE,
-            self._RX_SAVE[scan_settings.rx_save])
+            current_index=scan_settings.rx_save)
         rs = RadioSetting("scan_settings.rx_save", "RX SAVE", val)
         menu.append(rs)
 
@@ -909,7 +937,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._VFO_MODE,
-            self._VFO_MODE[scan_settings.vfo_mode])
+            current_index=scan_settings.vfo_mode)
         rs = RadioSetting("scan_settings.vfo_mode", "VFO MODE", val)
         menu.append(rs)
 
@@ -917,7 +945,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._TOT_TIME,
-            self._TOT_TIME[scan_settings.tot])
+            current_index=scan_settings.tot)
         rs = RadioSetting("scan_settings.tot", "Transmit Timeout (TOT)", val)
         menu.append(rs)
 
@@ -925,7 +953,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._MIC_GAIN,
-            self._MIC_GAIN[scan_settings.mic_gain])
+            current_index=scan_settings.mic_gain)
         rs = RadioSetting("scan_settings.mic_gain", "Mic Gain", val)
         menu.append(rs)
 
@@ -934,7 +962,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         scan_settings_2 = self._memobj.scan_settings_2
         val = RadioSettingValueList(
             self._VOLUME,
-            self._VOLUME[scan_settings_2.volume])
+            current_index=scan_settings_2.volume)
         rs = RadioSetting("scan_settings_2.volume", "Volume", val)
         menu.append(rs)
 
@@ -943,7 +971,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         squelch_settings = self._memobj.squelch_settings
         val = RadioSettingValueList(
             self._SQUELCH,
-            self._SQUELCH[squelch_settings.squelch])
+            current_index=squelch_settings.squelch)
         rs = RadioSetting("squelch_settings.squelch", "Squelch", val)
         menu.append(rs)
 
@@ -966,7 +994,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         digital_settings = self._memobj.digital_settings
         val = RadioSettingValueList(
             self._AMS_TX_MODE,
-            self._AMS_TX_MODE[digital_settings.ams_tx_mode])
+            current_index=digital_settings.ams_tx_mode)
         rs = RadioSetting("digital_settings.ams_tx_mode", "AMS TX Mode", val)
         menu.append(rs)
 
@@ -974,7 +1002,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._VW_MODE,
-            self._VW_MODE[digital_settings.vw_mode])
+            current_index=digital_settings.vw_mode)
         rs = RadioSetting("digital_settings.vw_mode", "VW Mode", val)
         menu.append(rs)
 
@@ -982,7 +1010,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._DG_ID,
-            self._DG_ID[digital_settings.tx_dg_id])
+            current_index=digital_settings.tx_dg_id)
         rs = RadioSetting("digital_settings.tx_dg_id", "TX DG-ID", val)
         menu.append(rs)
 
@@ -990,7 +1018,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._DG_ID,
-            self._DG_ID[digital_settings.rx_dg_id])
+            current_index=digital_settings.rx_dg_id)
         rs = RadioSetting("digital_settings.rx_dg_id", "RX DG-ID", val)
         menu.append(rs)
 
@@ -1011,8 +1039,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._DIG_POP_UP,
-            self._DIG_POP_UP[
-                0 if digital_settings_more.digital_popup == 0 else digital_settings_more.digital_popup - 9])
+            current_index=0 if digital_settings_more.digital_popup == 0 else digital_settings_more.digital_popup - 9)
 
         rs = RadioSetting("digital_settings_more.digital_popup", "Digital Popup", val)
         rs.set_apply_callback(self.apply_digital_popup, digital_settings_more)
@@ -1022,7 +1049,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._STANDBY_BEEP,
-            self._STANDBY_BEEP[digital_settings.standby_beep])
+            current_index=digital_settings.standby_beep)
         rs = RadioSetting("digital_settings.standby_beep", "Standby Beep", val)
         menu.append(rs)
 
@@ -1036,7 +1063,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         first_settings = self._memobj.first_settings
         val = RadioSettingValueList(
             self._GM_RING,
-            self._GM_RING[first_settings.gm_ring])
+            current_index=first_settings.gm_ring)
         rs = RadioSetting("first_settings.gm_ring", "GM Ring", val)
         menu.append(rs)
 
@@ -1045,7 +1072,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         scan_settings = self._memobj.scan_settings
         val = RadioSettingValueList(
             self._GM_INTERVAL,
-            self._GM_INTERVAL[scan_settings.gm_interval])
+            current_index=scan_settings.gm_interval)
         rs = RadioSetting("scan_settings.gm_interval", "GM Interval", val)
         menu.append(rs)
 
@@ -1059,7 +1086,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.dw_rt])
+            current_index=scan_settings.dw_rt)
         rs = RadioSetting("scan_settings.dw_rt", "Dual Watch Priority Channel Revert", val)
         menu.append(rs)
 
@@ -1067,7 +1094,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._SCAN_RESTART,
-            self._SCAN_RESTART[scan_settings.dw_interval])
+            current_index=scan_settings.dw_interval)
         rs = RadioSetting("scan_settings.dw_interval", "Dual Watch Interval", val)
         menu.append(rs)
 
@@ -1076,7 +1103,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         first_settings = self._memobj.first_settings
         val = RadioSettingValueList(
             self._SCAN_RESUME,
-            self._SCAN_RESUME[first_settings.dw_resume_interval])
+            current_index=first_settings.dw_resume_interval)
         rs = RadioSetting("first_settings.dw_resume_interval", "Dual Watch Resume Interval", val)
         menu.append(rs)
 
@@ -1084,7 +1111,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._OFF_ON,
-            self._OFF_ON[scan_settings.scan_lamp])
+            current_index=scan_settings.scan_lamp)
         rs = RadioSetting("scan_settings.scan_lamp", "Scan Lamp", val)
         menu.append(rs)
 
@@ -1092,7 +1119,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
 
         val = RadioSettingValueList(
             self._SCAN_RESTART,
-            self._SCAN_RESTART[scan_settings.scan_restart])
+            current_index=scan_settings.scan_restart)
         rs = RadioSetting("scan_settings.scan_restart", "Scan Restart", val)
         menu.append(rs)
 
@@ -1107,7 +1134,7 @@ class FT70Radio(yaesu_clone.YaesuCloneModeRadio):
         first_settings = self._memobj.first_settings
         val = RadioSettingValueList(
             self._SCAN_RESUME,
-            self._SCAN_RESUME[first_settings.scan_resume])
+            current_index=first_settings.scan_resume)
         rs = RadioSetting("first_settings.scan_resume", "Scan Resume", val)
         menu.append(rs)
 

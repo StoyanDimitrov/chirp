@@ -50,7 +50,10 @@ def _rawrecv(radio, amount):
         msg = "Generic error reading data from radio; check your cable."
         raise errors.RadioError(msg)
 
-    if len(data) != amount:
+    if not data:
+        LOG.debug('No response from radio')
+        raise errors.RadioNoContactLikelyK1()
+    elif len(data) != amount:
         LOG.debug('Wanted %i, got %i: %s',
                   amount, len(data), util.hexprint(data))
         msg = "Error reading data from radio: not the amount of data we want."
@@ -660,12 +663,12 @@ class BaofengCommonHT(chirp_common.CloneModeRadio,
 
         rs = RadioSetting("pttid", "PTT ID",
                           RadioSettingValueList(self.PTTID_LIST,
-                                                self.PTTID_LIST[_mem.pttid]))
+                                                current_index=_mem.pttid))
         mem.extra.append(rs)
 
         rs = RadioSetting("scode", "S-CODE",
                           RadioSettingValueList(self.SCODE_LIST,
-                                                self.SCODE_LIST[_mem.scode]))
+                                                current_index=_mem.scode))
         mem.extra.append(rs)
 
         immutable = []

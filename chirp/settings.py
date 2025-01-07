@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import warnings
 
 from chirp import chirp_common
 
@@ -226,6 +227,14 @@ class RadioSettingValueList(RadioSettingValue):
     def __init__(self, options, current=None, current_index=0):
         RadioSettingValue.__init__(self)
         self._options = list(options)
+        if current is not None:
+            # Using current_index is safer than using current because we can
+            # gracefully handle out-of-range values without crashing. All new
+            # code should use current_index and old code should be fixed.
+            warnings.warn(
+                'RadioSettingValueList should be provided with '
+                'current_index instead of current (value) for '
+                'safety', FutureWarning, stacklevel=2)
         self.queue_current(current if current is not None
                            else int(current_index))
 
@@ -319,11 +328,18 @@ class RadioSettingValueMap(RadioSettingValueList):
                                         "instead of: %s" % str(map_entry))
         user_options = [e[0] for e in map_entries]
         self._mem_vals = [e[1] for e in map_entries]
-        RadioSettingValueList.__init__(self, user_options, user_options[0])
+        RadioSettingValueList.__init__(self, user_options, current_index=0)
         if mem_val is not None:
-            self.set_mem_val(mem_val)
+            try:
+                self.queue_current(self._mem_vals.index(mem_val))
+            except ValueError:
+                LOG.error('Memory value %r not in value list %r',
+                          mem_val, self._mem_vals)
+                # Set this to just out of bounds so that the invalid-current
+                # handling detects it and flags it as invalid to the user.
+                self.queue_current(len(self._mem_vals))
         elif user_option is not None:
-            self.set_value(user_option)
+            self.queue_current(user_option)
         self._has_changed = False
 
     def set_mem_val(self, mem_val):

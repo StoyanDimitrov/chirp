@@ -22,7 +22,6 @@ import os
 import platform
 import shutil
 import tempfile
-import textwrap
 import threading
 
 import wx
@@ -474,12 +473,12 @@ class ChirpSettingGrid(wx.Panel):
             else:
                 LOG.info('User made change to %s=%s despite warning',
                          event.GetPropertyName(), event.GetValue())
-        self._needs_reload = setting.volatile
-        if self.needs_reload:
+        if setting.volatile:
             wx.MessageBox(_(
                 'Changing this setting requires refreshing the settings from '
                 'the image, which will happen now.'),
                           _('Refresh required'), wx.OK)
+            self._needs_reload = True
 
         # If we were unspecified or otherwise marked, clear those markings
         self.pg.SetPropertyColoursToDefault(event.GetProperty().GetName())
@@ -489,15 +488,13 @@ class ChirpSettingGrid(wx.Panel):
         return self._group.get_name()
 
     @property
-    def needs_reload(self):
-        return self._needs_reload
-
-    @property
     def propgrid(self):
         return self.pg
 
     def _pg_changed(self, event):
-        wx.PostEvent(self, EditorChanged(self.GetId()))
+        wx.PostEvent(self, EditorChanged(self.GetId(),
+                                         reload=self._needs_reload))
+        self._needs_reload = False
 
     def _get_editor_int(self, setting, value):
         e = wx.propgrid.IntProperty(setting.get_shortname(),
@@ -711,8 +708,51 @@ def temporary_debug_log():
     return dst
 
 
+class MultiErrorDialog(wx.Dialog):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        self.SetSizer(vbox)
+
+        self.choices = []
+        self.choice_box = wx.ListBox(self)
+        vbox.Add(self.choice_box, border=10, proportion=0,
+                 flag=wx.EXPAND | wx.ALL)
+
+        self.message = wx.TextCtrl(self)
+        self.message.SetEditable(False)
+        vbox.Add(self.message, border=10, proportion=1,
+                 flag=wx.EXPAND | wx.ALL)
+
+        buttons = self.CreateButtonSizer(wx.OK)
+        vbox.Add(buttons, border=10, flag=wx.ALL)
+
+        self.Bind(wx.EVT_BUTTON, self._button)
+        self.choice_box.Bind(wx.EVT_LISTBOX, self._selected)
+
+        self.SetMinSize((600, 400))
+        self.Fit()
+        self.Center()
+
+    def _button(self, event):
+        self.EndModal(wx.ID_OK)
+
+    def select(self, index):
+        error = self.choices[index]
+        self.message.SetValue('%s in %s:\n%s' % (
+            error.levelname, error.module, error.getMessage()))
+
+    def _selected(self, event):
+        self.select(event.GetInt())
+
+    def set_errors(self, errors):
+        self.choices = errors
+        self.choice_box.Set([x.getMessage() for x in self.choices])
+        self.select(0)
+
+
 @contextlib.contextmanager
-def expose_logs(level, root, label, maxlen=128):
+def expose_logs(level, root, label, maxlen=128, parent=None):
     if not isinstance(root, tuple):
         root = (root,)
 
@@ -725,9 +765,7 @@ def expose_logs(level, root, label, maxlen=128):
             lines = list(itertools.chain.from_iterable(x.get_history()
                                                        for x in histories))
             if lines:
-                msg = os.linesep.join(textwrap.shorten(x.getMessage(), maxlen)
-                                      for x in lines)
-                d = wx.MessageDialog(
-                    None, str(msg), label,
-                    style=wx.OK | wx.ICON_INFORMATION)
+                d = MultiErrorDialog(parent)
+                d.SetTitle(label)
+                d.set_errors(lines)
                 d.ShowModal()

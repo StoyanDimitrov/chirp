@@ -126,7 +126,10 @@ class RepeaterBook(base.NetworkResultRadio):
         if r.status_code != 200:
             if modified:
                 status.send_status('Using cached data', 50)
-            status.send_fail('Got error code %i from server' % r.status_code)
+            status.send_fail('Got error code %i (%s) from server' % (
+                r.status_code, r.reason))
+            LOG.error('Repeaterbook query %r returned %i (%s)',
+                      r.url, r.status_code, r.reason)
             return
         tmp = data_file + '.tmp'
         chunk_size = 8192
@@ -143,6 +146,9 @@ class RepeaterBook(base.NetworkResultRadio):
             results = json.loads(data)
         except Exception as e:
             LOG.exception('Invalid JSON in response: %s' % e)
+            LOG.error('Repeaterbook query %r returned %i',
+                      r.url, r.status_code)
+            LOG.error('Start of data:%s%s', os.linesep, data[:256])
             status.send_fail('RepeaterBook returned invalid response')
             return
 
@@ -161,7 +167,7 @@ class RepeaterBook(base.NetworkResultRadio):
         status.send_status('Download complete', 50)
         return data_file
 
-    def item_to_memory(self, item, number):
+    def item_to_memory(self, item):
         if item.get('D-Star') == 'Yes':
             m = chirp_common.DVMemory()
             m.dv_urcall = 'CQCQCQ'.ljust(8)
@@ -169,7 +175,6 @@ class RepeaterBook(base.NetworkResultRadio):
             m.dv_rpt2call = item.get('Callsign')[:8].ljust(8)
         else:
             m = chirp_common.Memory()
-        m.number = number
         m.freq = chirp_common.parse_freq(item['Frequency'])
         try:
             m.tuning_step = chirp_common.required_step(m.freq)
@@ -275,9 +280,8 @@ class RepeaterBook(base.NetworkResultRadio):
                 continue
             if not included_band(item):
                 continue
-            i += 1
             try:
-                m = self.item_to_memory(item, i)
+                m = self.item_to_memory(item)
             except Exception as e:
                 LOG.warning('Unable to convert repeater %s: %s',
                             item['Rptr ID'], e)
@@ -291,6 +295,8 @@ class RepeaterBook(base.NetworkResultRadio):
                 m.mode = 'FM'
             if modes and m.mode not in modes:
                 continue
+            m.number = i
+            i += 1
             self._memories.append(m)
 
         self.MODEL = '%s %s' % (params.get('country'),

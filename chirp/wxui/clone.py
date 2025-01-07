@@ -19,6 +19,7 @@ import platform
 import re
 import textwrap
 import threading
+import webbrowser
 
 import serial
 from serial.tools import list_ports
@@ -38,16 +39,31 @@ LOG = logging.getLogger(__name__)
 CONF = config.get()
 HELPME = _('Help Me...')
 CUSTOM = _('Custom...')
+ID_RECENT = wx.NewId()
+
+
+def is_prolific_warning(string):
+    return 'PL2303' in string and 'CONTACT YOUR SUPPLIER' in string
+
+
+def get_model_label(rclass):
+    detected = ','.join(
+        detected_value(rclass, m)
+        for m in rclass.detected_models(include_self=False))
+    if len(detected) > (32 - 5):
+        detected = 'others'
+    return detected
 
 
 def get_fakes():
     return {
-        'Fake NOP': developer.FakeSerial(),
-        'Fake Echo NOP': developer.FakeEchoSerial(),
-        'Fake F7E': fake.FakeKenwoodSerial(),
-        'Fake UV17': fake.FakeUV17Serial(),
-        'Fake UV17Pro': fake.FakeUV17ProSerial(),
-        'Fake AT778': developer.FakeAT778(),
+        'Fake NOP': developer.FakeSerial,
+        'Fake Echo NOP': developer.FakeEchoSerial,
+        'Fake F7E': fake.FakeKenwoodSerial,
+        'Fake UV17': fake.FakeUV17Serial,
+        'Fake UV17Pro': fake.FakeUV17ProSerial,
+        'Fake AT778': developer.FakeAT778,
+        'Fake Open Error': developer.FakeErrorOpenSerial,
     }
 
 
@@ -76,6 +92,12 @@ class CloneThread(threading.Thread):
     def run(self):
         try:
             self._fn()
+        except errors.SpecificRadioError as e:
+            if self._dialog:
+                LOG.exception('Failed to clone: %s', e)
+                self._dialog.fail(e)
+            else:
+                LOG.warning('Clone failed after cancel: %s', e)
         except Exception as e:
             if self._dialog:
                 LOG.exception('Failed to clone: %s' % e)
@@ -131,7 +153,7 @@ class SettingsThread(threading.Thread):
 
 def open_serial(port, rclass):
     if port.startswith('Fake'):
-        return get_fakes()[port]
+        return get_fakes()[port]()
     if '://' in port:
         pipe = serial.serial_for_url(port, do_not_open=True)
         pipe.timeout = 0.25
@@ -247,6 +269,34 @@ def model_value(rclass):
     return ('%s %s' % (rclass.MODEL, rclass.VARIANT)).strip()
 
 
+def detected_value(parent_rclass, rclass):
+    """Try to calculate a label for detected classes.
+
+    This should be short and only represent the difference between them (like
+    a VARIANT or different MODEL).
+    """
+    if parent_rclass.MODEL != rclass.MODEL:
+        # If the model is different, use that
+        label = rclass.MODEL
+        # If the detected class is a modified MODEL (i.e. 'RT95' and 'RT95 VOX'
+        # then strip off the prefix and the delimiter, if any.
+        if label.startswith(parent_rclass.MODEL):
+            label = label.replace(parent_rclass.MODEL, '').strip(' -_')
+    else:
+        # Assume the VARIANT is the distinguisher
+        label = rclass.VARIANT
+
+    # In case the detected class is a different vendor, prefix that
+    if parent_rclass.VENDOR != rclass.VENDOR:
+        label = '%s %s' % (rclass.VENDOR, label)
+
+    label = label.strip()
+    if not label:
+        LOG.error('Calculated blank detected value of %s from %s',
+                  rclass, parent_rclass)
+    return label
+
+
 # Make this global so it sticks for a session
 CUSTOM_PORTS = []
 
@@ -280,11 +330,19 @@ class ChirpCloneDialog(wx.Dialog):
         self.Bind(wx.EVT_CHOICE, self._selected_port, self._port)
         _add_grid(_('Port'), self._port)
 
-        self._vendor = wx.Choice(self, choices=['Icom', 'Yaesu'])
-        _add_grid(_('Vendor'), self._vendor)
+        panel = wx.Panel(self)
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        panel.SetSizer(hbox)
+        self._vendor = wx.Choice(panel, choices=['Icom', 'Yaesu'])
         self.Bind(wx.EVT_CHOICE, self._selected_vendor, self._vendor)
+        self._recent = wx.Button(panel, ID_RECENT, label=_('Recent...'))
+        self._recent.Enable(bool(CONF.get('recent_models', 'state')))
+        hbox.Add(self._vendor, proportion=1, border=10, flag=wx.RIGHT)
+        hbox.Add(self._recent)
+        _add_grid(_('Vendor'), panel)
 
-        self._model = wx.Choice(self, choices=[])
+        self._model_choices = []
+        self._model = wx.Choice(self, choices=self._model_choices)
         _add_grid(_('Model'), self._model)
         self.Bind(wx.EVT_CHOICE, self._selected_model, self._model)
 
@@ -439,6 +497,18 @@ class ChirpCloneDialog(wx.Dialog):
             return
         self.set_ports(after, select=found.device)
 
+    def _prolific_assist(self, event):
+        r = wx.MessageBox(
+            _('Your Prolific-based USB device will not work without '
+              'reverting to an older version of the driver. Visit the '
+              'CHIRP website to read more about how to resolve this?'),
+            _('Prolific USB device'),
+            style=wx.YES | wx.NO | wx.YES_DEFAULT, parent=self)
+        if r == wx.YES:
+            webbrowser.open(
+                'https://chirpmyradio.com/projects/chirp/wiki/'
+                'ProlificDriverDeprecation')
+
     def _add_aliases(self, rclass):
         for alias in rclass.ALIASES:
             class DynamicRadioAlias(rclass):
@@ -452,6 +522,7 @@ class ChirpCloneDialog(wx.Dialog):
     def disable_model_select(self):
         self._vendor.Disable()
         self._model.Disable()
+        self._recent.Disable()
 
     def disable_running(self):
         self._port.Disable()
@@ -461,6 +532,7 @@ class ChirpCloneDialog(wx.Dialog):
         raise NotImplementedError()
 
     def _selected_port(self, event):
+        okay_btn = self.FindWindowById(self.GetAffirmativeId())
         if self._port.GetStringSelection() == CUSTOM:
             port = wx.GetTextFromUser(_('Enter custom port:'),
                                       _('Custom Port'),
@@ -472,13 +544,72 @@ class ChirpCloneDialog(wx.Dialog):
         elif self._port.GetStringSelection() == HELPME:
             self._port_assist(event)
             return
+        elif is_prolific_warning(self._port.GetStringSelection()):
+            self._prolific_assist(event)
+            okay_btn.Enable(False)
+            return
         self._persist_choices()
+        okay_btn.Enable(True)
 
     def _select_vendor(self, vendor):
-        models = [model_value(x)
-                  for x in self._vendors[vendor]]
-        self._model.Set(models)
+        display_models = []
+        actual_models = []
+        for rclass in self._vendors[vendor]:
+            display = model_value(rclass)
+            actual_models.append(display)
+            detected = get_model_label(rclass)
+            if detected:
+                display += ' (+ %s)' % detected
+            display_models.append(display)
+
+        self._model_choices = actual_models
+        self._model.Set(display_models)
         self._model.SetSelection(0)
+
+    def _do_recent(self):
+        recent = CONF.get('recent_models', 'state')
+        if recent:
+            recent = recent.split(';')
+        else:
+            recent = []
+        recent_strs = ['%s %s' % tuple(vm.split(':', 1)) for vm in recent]
+        d = wx.SingleChoiceDialog(self,
+                                  _('Choose a recent model'),
+                                  _('Recent'),
+                                  recent_strs)
+        box = d.GetSizer()
+        panel = wx.Panel(d)
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        panel.SetSizer(hbox)
+        box.Insert(box.GetItemCount() - 1, panel)
+
+        def remove_selected(event):
+            listbox = [x for x in d.GetChildren()
+                       if isinstance(x, wx.ListBox)][0]
+            idx = listbox.GetSelection()
+            listbox.Delete(idx)
+            del recent_strs[idx]
+            del recent[idx]
+            CONF.set('recent_models', ';'.join(recent), 'state')
+            listbox.SetSelection(max(0, idx - 1))
+
+        always = wx.CheckBox(panel, label=_('Always start with recent list'))
+        always.SetValue(CONF.get_bool('always_start_recent', 'state'))
+        remove = wx.Button(panel, label=_('Remove'))
+        remove.SetToolTip(_('Remove selected model from list'))
+        remove.Bind(wx.EVT_BUTTON, remove_selected)
+        hbox.Add(always, border=10, flag=wx.ALL | wx.EXPAND)
+        hbox.Add(remove, border=10, flag=wx.ALL)
+
+        d.SetSize((400, 400))
+        d.SetMinSize((400, 400))
+        d.SetMaxSize((400, 400))
+        d.Center()
+        c = d.ShowModal()
+        if c == wx.ID_OK and recent:
+            vendor, model = recent[d.GetSelection()].split(':')
+            self.select_vendor_model(vendor, model)
+            CONF.set_bool('always_start_recent', always.GetValue(), 'state')
 
     def _selected_vendor(self, event):
         self._select_vendor(event.GetString())
@@ -490,7 +621,7 @@ class ChirpCloneDialog(wx.Dialog):
     def select_vendor_model(self, vendor, model):
         self._vendor.SetSelection(self._vendor.GetItems().index(vendor))
         self._select_vendor(vendor)
-        self._model.SetSelection(self._model.GetItems().index(model))
+        self._model.SetSelection(self._model_choices.index(model))
 
     def _status(self, status):
         def _safe_status():
@@ -504,11 +635,28 @@ class ChirpCloneDialog(wx.Dialog):
         self._radio.pipe.close()
         wx.CallAfter(self.EndModal, wx.ID_OK)
 
-    def fail(self, message):
+    def fail(self, error):
+        if isinstance(error, errors.SpecificRadioError):
+            link = error.get_link()
+            message = str(error)
+        else:
+            link = None
+            message = str(error)
+
         def safe_fail():
-            wx.MessageBox(message,
-                          _('Error communicating with radio'),
-                          wx.ICON_ERROR, parent=self)
+            if link:
+                buttons = wx.YES_NO | wx.NO_DEFAULT
+            else:
+                buttons = wx.OK
+            d = wx.MessageDialog(self, message,
+                                 _('Error communicating with radio'),
+                                 wx.ICON_ERROR | buttons)
+            if link:
+                d.SetYesNoLabels(_('More Info'), wx.ID_OK)
+            r = d.ShowModal()
+            if r == wx.ID_YES:
+                webbrowser.open(link)
+
             self.cancel_action()
         wx.CallAfter(safe_fail)
 
@@ -530,8 +678,27 @@ class ChirpCloneDialog(wx.Dialog):
         LOG.debug('Selected %r' % self._vendors[vendor][model])
         return self._vendors[vendor][model]
 
+    def _action(self, event):
+        id = event.GetEventObject().GetId()
+        if id == wx.ID_CANCEL:
+            if self._clone_thread:
+                self._clone_thread.stop()
+            self.EndModal(id)
+            return
+        try:
+            self._actual_action(event)
+        except Exception as e:
+            self.fail(str(e))
+            return
+
 
 class ChirpDownloadDialog(ChirpCloneDialog):
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        if (CONF.get_bool('always_start_recent', 'state') and
+                CONF.get('recent_models', 'state')):
+            self._do_recent()
+
     def _selected_model(self, event):
         super(ChirpDownloadDialog, self)._selected_model(event)
         rclass = self.get_selected_rclass()
@@ -556,11 +723,10 @@ class ChirpDownloadDialog(ChirpCloneDialog):
                          rclass)
                 self.FindWindowById(wx.ID_OK).Enable()
 
-    def _action(self, event):
-        if event.GetEventObject().GetId() == wx.ID_CANCEL:
-            if self._clone_thread:
-                self._clone_thread.stop()
-            self.EndModal(event.GetEventObject().GetId())
+    def _actual_action(self, event):
+        id = event.GetEventObject().GetId()
+        if id == ID_RECENT:
+            self._do_recent()
             return
 
         self._persist_choices()
@@ -635,8 +801,21 @@ class ChirpDownloadDialog(ChirpCloneDialog):
     def _persist_choices(self):
         # On download, persist the selections from the actual UI boxes
         CONF.set('last_vendor', self._vendor.GetStringSelection(), 'state')
-        CONF.set('last_model', self._model.GetStringSelection(), 'state')
+        CONF.set('last_model', self._model_choices[self._model.GetSelection()],
+                 'state')
         CONF.set('last_port', self.get_selected_port(), 'state')
+        recent = CONF.get('recent_models', 'state')
+        if recent:
+            recent = recent.split(';')
+        else:
+            recent = []
+        modelstr = '%s:%s' % (self._vendor.GetStringSelection(),
+                              self._model_choices[self._model.GetSelection()])
+        if modelstr in recent:
+            recent.remove(modelstr)
+        recent.insert(0, modelstr)
+        recent = recent[:10]
+        CONF.set('recent_models', ';'.join(recent), 'state')
 
 
 class ChirpUploadDialog(ChirpCloneDialog):
@@ -651,13 +830,7 @@ class ChirpUploadDialog(ChirpCloneDialog):
         if isinstance(self._radio, chirp_common.LiveRadio):
             self._radio = common.LiveAdapter(self._radio)
 
-    def _action(self, event):
-        if event.GetEventObject().GetId() == wx.ID_CANCEL:
-            if self._clone_thread:
-                self._clone_thread.stop()
-            self.EndModal(event.GetEventObject().GetId())
-            return
-
+    def _actual_action(self, event):
         self._persist_choices()
         self.disable_running()
         port = self.get_selected_port()

@@ -35,6 +35,7 @@ LOG = logging.getLogger(__name__)
 DTCS_CODES = tuple(sorted(chirp_common.DTCS_CODES + (645,)))
 
 DTMFCHARS = '0123456789ABCD*#'
+AIRBAND = (108000000, 136000000)
 
 
 def reset(radio):
@@ -482,14 +483,12 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
 
         # pttid, signal
 
-        cur = PTTID[int(_mem.pttid)]
         s = RadioSetting('pttid', 'PTTID',
-                         RadioSettingValueList(PTTID, cur))
+                         RadioSettingValueList(PTTID, int(_mem.pttid)))
         group.append(s)
 
-        cur = SIGNAL[int(_mem.signal)]
         s = RadioSetting('signal', 'Signal',
-                         RadioSettingValueList(SIGNAL, cur))
+                         RadioSettingValueList(SIGNAL, int(_mem.signal)))
         group.append(s)
 
         return group
@@ -579,12 +578,12 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
 
         _mem.rxfreq = mem.freq // 10
         if mem.duplex == '':
-            if isinstance(self, Senhaix8800Radio):
-                _mem.allow_tx = False
             _mem.txfreq = mem.freq // 10
         elif mem.duplex == 'split':
             _mem.txfreq = mem.offset // 10
         elif mem.duplex == 'off':
+            if isinstance(self, Senhaix8800Radio):
+                _mem.allow_tx = False
             for i in range(0, 4):
                 _mem.txfreq[i].set_raw(b'\xFF')
         elif mem.duplex == '-':
@@ -759,7 +758,7 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
                 RadioSetting(key, title,
                              RadioSettingValueList(
                                  choices,
-                                 choices[val])))
+                                 current_index=val)))
 
         if self.VENDOR == "Retevis":
             # Side Keys
@@ -782,7 +781,7 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
                 idx = SK_VALUES.index(0xFF)
             rs = RadioSetting('skey.skey1sp', 'Side Key 1 - Short Press',
                               RadioSettingValueList(SK_CHOICES,
-                                                    SK_CHOICES[idx]))
+                                                    current_index=idx))
             rs.set_apply_callback(apply_sk_listvalue, _skey.skey1sp)
             adv.append(rs)
 
@@ -793,7 +792,7 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
                 idx = SK_VALUES.index(0xFF)
             rs = RadioSetting('skey.skey1lp', 'Side Key 1 - Long Press',
                               RadioSettingValueList(SK_CHOICES,
-                                                    SK_CHOICES[idx]))
+                                                    current_index=idx))
             rs.set_apply_callback(apply_sk_listvalue, _skey.skey1lp)
             adv.append(rs)
 
@@ -804,7 +803,7 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
                 idx = SK_VALUES.index(0xFF)
             rs = RadioSetting('skey.skey2sp', 'Side Key 2 - Short Press',
                               RadioSettingValueList(SK_CHOICES,
-                                                    SK_CHOICES[idx]))
+                                                    current_index=idx))
             rs.set_apply_callback(apply_sk_listvalue, _skey.skey2sp)
             adv.append(rs)
 
@@ -815,7 +814,7 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
                 idx = SK_VALUES.index(0xFF)
             rs = RadioSetting('skey.skey2lp', 'Side Key 2 - Long Press',
                               RadioSettingValueList(SK_CHOICES,
-                                                    SK_CHOICES[idx]))
+                                                    current_index=idx))
             rs.set_apply_callback(apply_sk_listvalue, _skey.skey2lp)
             adv.append(rs)
 
@@ -855,11 +854,17 @@ class RadioddityGA510Radio(chirp_common.CloneModeRadio):
 
             dtmf.append(rs)
 
+            try:
+                current_group = DTMFCHARS[int(anicode.groupcode)]
+            except IndexError:
+                LOG.warning('ANI group code index %i out of range',
+                            anicode.groupcode)
+                current_group = DTMFCHARS[0]
             dtmf.append(
                 RadioSetting(
                     "anicode.groupcode", "Group Code",
                     RadioSettingValueList(list(DTMFCHARS),
-                                          DTMFCHARS[int(anicode.groupcode)])))
+                                          current_group)))
 
         else:
             dtmf.append(
@@ -1040,6 +1045,33 @@ class Senhaix8800Radio(RadioddityGA510Radio):
     _mem_format = MODEL_SHX8800_FORMAT
     _magic = b'PROGROMSHXU'
 
+    def get_features(self):
+        rf = super().get_features()
+        rf.valid_bands = rf.valid_bands + [AIRBAND]
+        rf.valid_modes = rf.valid_modes + ['AM']
+        return rf
+
+    def get_memory(self, number):
+        m = super().get_memory(number)
+        if chirp_common.in_range(m.freq, [AIRBAND]):
+            m.mode = 'AM'
+        return m
+
+    def validate_memory(self, mem):
+        msgs = []
+        if chirp_common.in_range(mem.freq, [AIRBAND]):
+            if not mem.mode == 'AM':
+                msgs.append(chirp_common.ValidationWarning(
+                    _('Frequency in this range requires AM mode')))
+            if mem.duplex or mem.tmode:
+                msgs.append(chirp_common.ValidationError(
+                    _('AM mode does not allow duplex or tone')))
+        elif not chirp_common.in_range(
+                mem.freq, [AIRBAND]) and mem.mode == 'AM':
+            msgs.append(chirp_common.ValidationWarning(
+                _('Frequency in this range must not be AM mode')))
+        return msgs + super().validate_memory(mem)
+
 
 @directory.register
 class RadioddityGS5BRadio(Senhaix8800Radio):
@@ -1106,6 +1138,7 @@ class RadioddityGA510v2(baofeng_uv17.UV17):
 
     MODES = ["FM", "NFM"]
     BLOCK_ORDER = [2, 4, 6, 16, 24]
+    BLOCK_O_READ = list(BLOCK_ORDER)
     MEM_TOTAL = 0x6000
     WRITE_MEM_TOTAL = 0x6000
     BLOCK_SIZE = 0x40
@@ -1131,7 +1164,7 @@ class RadioddityGA510v2(baofeng_uv17.UV17):
                     chirp_common.PowerLevel("Medium", watts=5.00),
                     chirp_common.PowerLevel("High",  watts=10.00)]
 
-    LENGTH_NAME = 11
+    LENGTH_NAME = 8
     SCODE_LIST = ["%s" % x for x in range(1, 16)]
     SQUELCH_LIST = ["Off"] + list("123456789")
     LIST_POWERON_DISPLAY_TYPE = ["Full", "Message", "Voltage"]

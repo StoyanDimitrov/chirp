@@ -137,14 +137,14 @@ def _checksum(data):
     """the radio block checksum algorithm"""
     cs = 0
     for byte in data:
-        cs += ord(byte)
+        cs += byte
 
     return cs % 256
 
 
 def _update_cs(radio):
     """Update the checksum on the mmap"""
-    payload = str(radio.get_mmap())[:-1]
+    payload = radio.get_mmap().get_packed()[:-1]
     cs = _checksum(payload)
     radio._mmap[MEM_SIZE - 1] = cs
 
@@ -164,7 +164,7 @@ def _do_download(radio):
     status.msg = " Press A to clone. "
     radio.status_fn(status)
 
-    data = ""
+    data = b""
     for i in range(0, MEM_SIZE):
         a = radio.pipe.read(1)
         if len(a) == 0:
@@ -189,7 +189,7 @@ def _do_download(radio):
             (MEM_SIZE, len(data))
         raise errors.RadioError(msg)
 
-    if ord(data[-1]) != _checksum(data[:-1]):
+    if data[-1] != _checksum(data[:-1]):
         msg = "Bad checksum, please try again."
         raise errors.RadioError(msg)
 
@@ -222,7 +222,7 @@ def _do_upload(radio):
     radio.status_fn(status)
 
     # send data
-    data = str(radio.get_mmap())
+    data = radio.get_mmap().get_packed()
 
     # this radio has a trick, the EEPROM is an ancient SPI one, so it needs
     # some time to write, so we send every byte and then allow
@@ -272,7 +272,6 @@ def int_to_bcd(data):
 class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
     """Vertex FTL1011/2011/7011 4/8/12/24 channels"""
     VENDOR = "Vertex Standard"
-    NEEDS_COMPAT_SERIAL = True
     _memsize = MEM_SIZE
     _upper = 0
     _range = []
@@ -353,11 +352,11 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
         if _model_match(self, data) is False:
             raise errors.RadioError("Incorrect radio model")
 
-        self._mmap = memmap.MemoryMap(data)
+        self._mmap = memmap.MemoryMapbytes(data)
         self.process_mmap()
 
         # set the channel count from the radio eeprom
-        self._upper = int(ord(data[4]))
+        self._upper = data[4]
 
     def sync_out(self):
         """Do an upload to the radio eeprom"""
@@ -365,7 +364,7 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
         _update_cs(self)
 
         # sanity check, match model
-        data = str(self.get_mmap())
+        data = self.get_mmap()
         if len(data) != MEM_SIZE:
             raise errors.RadioError("Wrong radio image? Size miss match.")
 
@@ -516,7 +515,7 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
 
         bcl = RadioSetting("bclo", "Busy channel lockout",
                            RadioSettingValueList(LIST_BCL,
-                                                 LIST_BCL[bcls]))
+                                                 current_index=bcls))
         mem.extra.append(bcl)
 
         # return mem
@@ -627,23 +626,23 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
         # ## Basic Settings
         scanr = RadioSetting("scan_resume", "Scan resume by",
                              RadioSettingValueList(
-                              LIST_SCAN_RESUME, LIST_SCAN_RESUME[_settings.scan_resume]))
+                              LIST_SCAN_RESUME, current_index=_settings.scan_resume))
         basic.append(scanr)
 
         scant = RadioSetting("scan_time", "Scan time per channel",
                              RadioSettingValueList(
-                              LIST_SCAN_TIME, LIST_SCAN_TIME[_settings.scan_time]))
+                              LIST_SCAN_TIME, current_index=_settings.scan_time))
         basic.append(scant)
 
         LIST_PCH = ["%s" % x for x in range(1, _settings.chcount + 1)]
         pch1 = RadioSetting("pch1", "Priority channel 1",
                             RadioSettingValueList(
-                                 LIST_PCH, LIST_PCH[_settings.pch1]))
+                                 LIST_PCH, current_index=_settings.pch1))
         basic.append(pch1)
 
         pch2 = RadioSetting("pch2", "Priority channel 2",
                             RadioSettingValueList(
-                                LIST_PCH, LIST_PCH[_settings.pch2]))
+                                LIST_PCH, current_index=_settings.pch2))
         basic.append(pch2)
 
         scanp = RadioSetting("priority_during_scan", "Disable priority during scan",
@@ -652,7 +651,7 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
 
         scanps = RadioSetting("priority_speed", "Priority scan speed",
                               RadioSettingValueList(
-                                LIST_SCAN_P_SPEED, LIST_SCAN_P_SPEED[_settings.priority_speed]))
+                                LIST_SCAN_P_SPEED, current_index=_settings.priority_speed))
         basic.append(scanps)
 
         oh = RadioSetting("off_hook", "Off Hook",  # inverted
@@ -665,17 +664,17 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
 
         tot = RadioSetting("tot", "Time out timer",
                            RadioSettingValueList(
-                                 LIST_TOT, LIST_TOT[_settings.tot]))
+                                 LIST_TOT, current_index=_settings.tot))
         basic.append(tot)
 
         totr = RadioSetting("tot_resume", "Time out timer resume guard",
                             RadioSettingValueList(
-                               LIST_TOT_RESUME, LIST_TOT_RESUME[_settings.tot_resume]))
+                               LIST_TOT_RESUME, current_index=_settings.tot_resume))
         basic.append(totr)
 
         ak = RadioSetting("a_key", "A Key function",
                           RadioSettingValueList(
-                                LIST_A_KEY, LIST_A_KEY[_settings.a_key]))
+                                LIST_A_KEY, current_index=_settings.a_key))
         basic.append(ak)
 
         monitor = RadioSetting("monitor", "Monitor",  # inverted
@@ -684,7 +683,7 @@ class ftlx011(chirp_common.CloneModeRadio, chirp_common.ExperimentalRadio):
 
         homec = RadioSetting("home_channel", "Home Channel is",
                              RadioSettingValueList(
-                                 LIST_HOME_CHANNEL, LIST_HOME_CHANNEL[_settings.home_channel]))
+                                 LIST_HOME_CHANNEL, current_index=_settings.home_channel))
         basic.append(homec)
 
         txd = RadioSetting("tx_carrier_delay", "Talk Back",
@@ -743,7 +742,7 @@ class ftl1011(ftlx011):
     _memsize = MEM_SIZE
     _upper = 4
     _range = [44000000, 56000000]
-    finger = ["\x52", "\x16\x90"]
+    finger = [b"\x52", b"\x16\x90"]
 
 
 @directory.register
@@ -753,7 +752,7 @@ class ftl2011(ftlx011):
     _memsize = MEM_SIZE
     _upper = 24
     _range = [134000000, 174000000]
-    finger = ["\x50", "\x21\x40"]
+    finger = [b"\x50", b"\x21\x40"]
 
 
 @directory.register
@@ -763,7 +762,7 @@ class ftl7011(ftlx011):
     _memsize = MEM_SIZE
     _upper = 24
     _range = [400000000, 512000000]
-    finger = ["\x54", "\x47\x90"]
+    finger = [b"\x54", b"\x47\x90"]
 
 
 @directory.register
@@ -773,4 +772,4 @@ class ftl8011(ftlx011):
     _memsize = MEM_SIZE
     _upper = 24
     _range = [400000000, 512000000]
-    finger = ["\x5c", "\x45\x10"]
+    finger = [b"\x5c", b"\x45\x10"]

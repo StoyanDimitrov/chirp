@@ -634,12 +634,12 @@ class JC8810base(chirp_common.CloneModeRadio):
         mem.extra.append(rset)
 
         # PTT-ID
-        rs = RadioSettingValueList(PTTID_LIST, PTTID_LIST[_mem.pttid])
+        rs = RadioSettingValueList(PTTID_LIST, current_index=_mem.pttid)
         rset = RadioSetting("pttid", "PTT ID", rs)
         mem.extra.append(rset)
 
         # Signal (DTMF Encoder Group #)
-        rs = RadioSettingValueList(PTTIDCODE_LIST, PTTIDCODE_LIST[_mem.scode])
+        rs = RadioSettingValueList(PTTIDCODE_LIST, current_index=_mem.scode)
         rset = RadioSetting("scode", "PTT ID Code", rs)
         mem.extra.append(rset)
 
@@ -749,7 +749,7 @@ class JC8810base(chirp_common.CloneModeRadio):
         group = RadioSettings(basic)
 
         # Menu 12: TOT
-        rs = RadioSettingValueList(TOT_LIST, TOT_LIST[_settings.tot])
+        rs = RadioSettingValueList(TOT_LIST, current_index=_settings.tot)
         rset = RadioSetting("tot", "Time Out Timer", rs)
         basic.append(rset)
 
@@ -759,12 +759,12 @@ class JC8810base(chirp_common.CloneModeRadio):
         basic.append(rset)
 
         # Menu 13: VOX
-        rs = RadioSettingValueList(OFF1TO9_LIST, OFF1TO9_LIST[_settings.vox])
+        rs = RadioSettingValueList(OFF1TO9_LIST, current_index=_settings.vox)
         rset = RadioSetting("vox", "VOX", rs)
         basic.append(rset)
 
         # Menu 39: VOX DELAY
-        rs = RadioSettingValueList(VOXD_LIST, VOXD_LIST[_settings.voxd])
+        rs = RadioSettingValueList(VOXD_LIST, current_index=_settings.voxd)
         rset = RadioSetting("voxd", "VOX Delay", rs)
         basic.append(rset)
 
@@ -776,55 +776,55 @@ class JC8810base(chirp_common.CloneModeRadio):
         if self.MODEL not in ["A36plus", "A36plus_8w", "UV-A37", "AR-730"]:
             # Menu 17: LANGUAGE
             rs = RadioSettingValueList(LANGUAGE_LIST,
-                                       LANGUAGE_LIST[_settings.language])
+                                       current_index=_settings.language)
             rset = RadioSetting("language", "Voice", rs)
             basic.append(rset)
 
         # Menu 23: ABR
-        rs = RadioSettingValueList(ABR_LIST, ABR_LIST[_settings.abr])
+        rs = RadioSettingValueList(ABR_LIST, current_index=_settings.abr)
         rset = RadioSetting("abr", "Auto BackLight", rs)
         basic.append(rset)
 
         # Work Mode A
         rs = RadioSettingValueList(WORKMODE_LIST,
-                                   WORKMODE_LIST[_settings.vfomra])
+                                   current_index=_settings.vfomra)
         rset = RadioSetting("vfomra", "Work Mode A", rs)
         basic.append(rset)
 
         # Work Mode B
         rs = RadioSettingValueList(WORKMODE_LIST,
-                                   WORKMODE_LIST[_settings.vfomrb])
+                                   current_index=_settings.vfomrb)
         rset = RadioSetting("vfomrb", "Work Mode B", rs)
         basic.append(rset)
 
         # Menu 19: SC-REV
-        rs = RadioSettingValueList(SCREV_LIST, SCREV_LIST[_settings.screv])
+        rs = RadioSettingValueList(SCREV_LIST, current_index=_settings.screv)
         rset = RadioSetting("screv", "Scan Resume Method", rs)
         basic.append(rset)
 
         # Menu 10: SAVE
         rs = RadioSettingValueList(SAVE_LIST,
-                                   SAVE_LIST[_settings.save])
+                                   current_index=_settings.save)
         rset = RadioSetting("save", "Battery Save Mode", rs)
         basic.append(rset)
 
         # Menu 42: MDF-A
-        rs = RadioSettingValueList(MDF_LIST, MDF_LIST[_settings.mdfa])
+        rs = RadioSettingValueList(MDF_LIST, current_index=_settings.mdfa)
         rset = RadioSetting("mdfa", "Memory Display Format A", rs)
         basic.append(rset)
 
         # Menu 43: MDF-B
-        rs = RadioSettingValueList(MDF_LIST, MDF_LIST[_settings.mdfb])
+        rs = RadioSettingValueList(MDF_LIST, current_index=_settings.mdfb)
         rset = RadioSetting("mdfb", "Memory Display Format B", rs)
         basic.append(rset)
 
         # Menu 33: DTMFST (DTMF ST)
-        rs = RadioSettingValueList(DTMFST_LIST, DTMFST_LIST[_settings.dtmfst])
+        rs = RadioSettingValueList(DTMFST_LIST, current_index=_settings.dtmfst)
         rset = RadioSetting("dtmfst", "DTMF Side Tone", rs)
         basic.append(rset)
 
         # Menu 37: PTT-LT
-        rs = RadioSettingValueList(PTTLT_LIST, PTTLT_LIST[_settings.pttlt])
+        rs = RadioSettingValueList(PTTLT_LIST, current_index=_settings.pttlt)
         rset = RadioSetting("pttlt", "PTT Delay", rs)
         basic.append(rset)
 
@@ -840,7 +840,8 @@ class JC8810base(chirp_common.CloneModeRadio):
             val = SKEY2S_VALUES[index]
             obj.set_value(val)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-470"]:
             unwanted = [9, 10, 11, 12]
         elif self.MODEL in ["UV-A37", "AR-730"]:
             unwanted = [0, 5, 7, 9, 10, 11, 12]
@@ -860,7 +861,7 @@ class JC8810base(chirp_common.CloneModeRadio):
             idx = SKEY2S_VALUES.index(_settings.skey2_sp)
         else:
             idx = SKEY2S_VALUES.index(0x07)  # default FM
-        rs = RadioSettingValueList(SKEY2S_CHOICES, SKEY2S_CHOICES[idx])
+        rs = RadioSettingValueList(SKEY2S_CHOICES, current_index=idx)
         rset = RadioSetting("skey2_sp", "PF2 Key (Short Press)", rs)
         rset.set_apply_callback(apply_skey2s_listvalue, _settings.skey2_sp)
         basic.append(rset)
@@ -873,7 +874,8 @@ class JC8810base(chirp_common.CloneModeRadio):
             val = SKEY2L_VALUES[index]
             obj.set_value(val)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-470"]:
             unwanted = [8, 9, 10, 11, 12]
         elif self.MODEL in ["UV-A37", "AR-730"]:
             unwanted = [0, 5, 7, 8, 10, 11, 12]
@@ -893,7 +895,7 @@ class JC8810base(chirp_common.CloneModeRadio):
             idx = SKEY2L_VALUES.index(_settings.skey2_lp)
         else:
             idx = SKEY2L_VALUES.index(0x1D)  # default Search
-        rs = RadioSettingValueList(SKEY2L_CHOICES, SKEY2L_CHOICES[idx])
+        rs = RadioSettingValueList(SKEY2L_CHOICES, current_index=idx)
         rset = RadioSetting("skey2_lp", "PF2 Key (Long Press)", rs)
         rset.set_apply_callback(apply_skey2l_listvalue, _settings.skey2_lp)
         basic.append(rset)
@@ -906,7 +908,8 @@ class JC8810base(chirp_common.CloneModeRadio):
             val = SKEY3S_VALUES[index]
             obj.set_value(val)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-470"]:
             unwanted = [8, 9, 10, 11, 12]
         elif self.MODEL in ["UV-A37", "AR-730"]:
             unwanted = [0, 5, 7, 8, 9, 10, 11, 12]
@@ -926,13 +929,13 @@ class JC8810base(chirp_common.CloneModeRadio):
             idx = SKEY3S_VALUES.index(_settings.skey3_sp)
         else:
             idx = SKEY3S_VALUES.index(0x0C)  # default NOAA
-        rs = RadioSettingValueList(SKEY3S_CHOICES, SKEY3S_CHOICES[idx])
+        rs = RadioSettingValueList(SKEY3S_CHOICES, current_index=idx)
         rset = RadioSetting("skey3_sp", "PF3 Key (Short Press)", rs)
         rset.set_apply_callback(apply_skey3s_listvalue, _settings.skey3_sp)
         basic.append(rset)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470", "RT-630",
-                          "RT-495"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-470", "RT-630", "RT-495"]:
             # Menu 24: PF3 LONG PRESS (RT-470L)
             def apply_skey3l_listvalue(setting, obj):
                 LOG.debug("Setting value: " + str(setting.value) +
@@ -942,7 +945,8 @@ class JC8810base(chirp_common.CloneModeRadio):
                 val = SKEY2L_VALUES[index]
                 obj.set_value(val)
 
-            if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470"]:
+            if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                              "RT-470"]:
                 unwanted = [8, 9, 10, 11, 12]
             elif self.MODEL in ["RT-630", "RT-495"]:
                 unwanted = [5, 9, 10, 11, 12]
@@ -958,7 +962,7 @@ class JC8810base(chirp_common.CloneModeRadio):
                 idx = SKEY3L_VALUES.index(_settings.skey3_lp)
             else:
                 idx = SKEY3L_VALUES.index(0x1D)  # default SEARCH
-            rs = RadioSettingValueList(SKEY3L_CHOICES, SKEY3L_CHOICES[idx])
+            rs = RadioSettingValueList(SKEY3L_CHOICES, current_index=idx)
             rset = RadioSetting("skey3_lp", "PF3 Key (Long Press)", rs)
             rset.set_apply_callback(apply_skey3l_listvalue,
                                     _settings.skey3_lp)
@@ -973,7 +977,8 @@ class JC8810base(chirp_common.CloneModeRadio):
             val = SKEYTOP_VALUES[index]
             obj.set_value(val)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-470"]:
             unwanted = [8, 9, 10, 11, 12]
         elif self.MODEL in ["UV-A37", "AR-730"]:
             unwanted = [0, 5, 7, 8, 9, 10, 11, 12]
@@ -991,25 +996,26 @@ class JC8810base(chirp_common.CloneModeRadio):
             idx = SKEYTOP_VALUES.index(_settings.topkey_sp)
         else:
             idx = SKEYTOP_VALUES.index(0x1D)  # default SEARCH
-        rs = RadioSettingValueList(SKEYTOP_CHOICES, SKEYTOP_CHOICES[idx])
+        rs = RadioSettingValueList(SKEYTOP_CHOICES, current_index=idx)
         rset = RadioSetting("topkey_sp", "Top Key (Short Press)", rs)
         rset.set_apply_callback(apply_skeytop_listvalue,
                                 _settings.topkey_sp)
         basic.append(rset)
 
         # Mneu 36: TONE
-        rs = RadioSettingValueList(TONE_LIST, TONE_LIST[_settings.tone])
+        rs = RadioSettingValueList(TONE_LIST, current_index=_settings.tone)
         rset = RadioSetting("tone", "Tone-burst Frequency", rs)
         basic.append(rset)
 
         # Mneu 29: POWER ON MSG
-        rs = RadioSettingValueList(PONMSG_LIST, PONMSG_LIST[_settings.ponmsg])
+        rs = RadioSettingValueList(PONMSG_LIST, current_index=_settings.ponmsg)
         rset = RadioSetting("ponmsg", "Power On Message", rs)
         basic.append(rset)
 
-        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-630", "RT-495"]:
+        if self.MODEL in ["HI-8811", "RT-470L", "RT-470X", "RT-470X_BT",
+                          "RT-630", "RT-495"]:
             rs = RadioSettingValueList(TAILCODE_LIST,
-                                       TAILCODE_LIST[_settings.tailcode])
+                                       current_index=_settings.tailcode)
             rset = RadioSetting("tailcode", "Tail Code", rs)
             basic.append(rset)
 
@@ -1019,38 +1025,38 @@ class JC8810base(chirp_common.CloneModeRadio):
         basic.append(rset)
 
         # Menu 40: RP-STE
-        rs = RadioSettingValueList(RPSTE_LIST, RPSTE_LIST[_settings.rpste])
+        rs = RadioSettingValueList(RPSTE_LIST, current_index=_settings.rpste)
         rset = RadioSetting("rpste", "Squelch Tail Eliminate (repeater)", rs)
         basic.append(rset)
 
         # Menu 41: RPT-RL
-        rs = RadioSettingValueList(RPSTE_LIST, RPSTE_LIST[_settings.rptrl])
+        rs = RadioSettingValueList(RPSTE_LIST, current_index=_settings.rptrl)
         rset = RadioSetting("rptrl", "STE Repeater Delay", rs)
         basic.append(rset)
 
         # Menu 38: MENU EXIT TIME
         rs = RadioSettingValueList(MENUQUIT_LIST,
-                                   MENUQUIT_LIST[_settings.menuquit])
+                                   current_index=_settings.menuquit)
         rset = RadioSetting("menuquit", "Menu Auto Quit", rs)
         basic.append(rset)
 
         # Menu 34: AUTOLOCK
-        rs = RadioSettingValueList(AUTOLK_LIST, AUTOLK_LIST[_settings.autolk])
+        rs = RadioSettingValueList(AUTOLK_LIST, current_index=_settings.autolk)
         rset = RadioSetting("autolk", "Key Auto Lock", rs)
         basic.append(rset)
 
         # Menu 28: CDCSS SAVE MODE
-        rs = RadioSettingValueList(QTSAVE_LIST, QTSAVE_LIST[_settings.qtsave])
+        rs = RadioSettingValueList(QTSAVE_LIST, current_index=_settings.qtsave)
         rset = RadioSetting("qtsave", "QT Save Type", rs)
         basic.append(rset)
 
         # Menu 45: TX-A/B
-        rs = RadioSettingValueList(DUALTX_LIST, DUALTX_LIST[_settings.dualtx])
+        rs = RadioSettingValueList(DUALTX_LIST, current_index=_settings.dualtx)
         rset = RadioSetting("dualtx", "Dual TX", rs)
         basic.append(rset)
 
         # Menu 47: AL-MODE
-        rs = RadioSettingValueList(ALMODE_LIST, ALMODE_LIST[_settings.almode])
+        rs = RadioSettingValueList(ALMODE_LIST, current_index=_settings.almode)
         rset = RadioSetting("almode", "Alarm Mode", rs)
         basic.append(rset)
 
@@ -1061,7 +1067,7 @@ class JC8810base(chirp_common.CloneModeRadio):
         # choice, 'TONE1200'. RT-470 radios with a firmware version prior to
         #  v1.22 will not honor the ROGER menu's 'TONE1200' choice in CHIRP.
         # ==========
-        rs = RadioSettingValueList(ROGER_LIST, ROGER_LIST[_settings.roger])
+        rs = RadioSettingValueList(ROGER_LIST, current_index=_settings.roger)
         rset = RadioSetting("roger", "Roger", rs)
         basic.append(rset)
 
@@ -1090,7 +1096,7 @@ class JC8810base(chirp_common.CloneModeRadio):
         if self.MODEL not in ["A36plus", "A36plus_8w", "UV-A37", "AR-730"]:
             # Menu 48: RX END TAIL
             rs = RadioSettingValueList(TONERXEND_LIST,
-                                       TONERXEND_LIST[_settings.rxendtail])
+                                       current_index=_settings.rxendtail)
             rset = RadioSetting("rxendtail", "Tone RX End", rs)
             basic.append(rset)
 
@@ -1117,18 +1123,21 @@ class JC8810base(chirp_common.CloneModeRadio):
             dtmf.append(rset)
 
         rs = RadioSettingValueList(DTMFSPEED_LIST,
-                                   DTMFSPEED_LIST[_dtmf.dtmfon])
+                                   current_index=_dtmf.dtmfon)
         rset = RadioSetting("dtmf.dtmfon", "DTMF Speed (on)", rs)
         dtmf.append(rset)
 
         rs = RadioSettingValueList(DTMFSPEED_LIST,
-                                   DTMFSPEED_LIST[_dtmf.dtmfoff])
+                                   current_index=_dtmf.dtmfoff)
         rset = RadioSetting("dtmf.dtmfoff", "DTMF Speed (off)", rs)
         dtmf.append(rset)
 
-        rs = RadioSettingValueList(PTTID_LIST, PTTID_LIST[_settings.pttid])
-        rset = RadioSetting("pttid", "PTT ID", rs)
-        dtmf.append(rset)
+        # RT470X Plus Bluetooth does not seem to have correct PTTID setting
+        if self.MODEL not in ["RT-470X_BT"]:
+            rs = RadioSettingValueList(
+                PTTID_LIST, current_index=_settings.pttid)
+            rset = RadioSetting("pttid", "PTT ID", rs)
+            dtmf.append(rset)
 
         ani = RadioSettingGroup("ani", "ANI Code List Settings")
         group.append(ani)
@@ -1184,13 +1193,13 @@ class JC8810base(chirp_common.CloneModeRadio):
         if self.MODEL in ["A36plus", "A36plus_8w"]:
             # Menu 21: RX END TAIL
             rs = RadioSettingValueList(TONERXEND_LIST,
-                                       TONERXEND_LIST[_settings.skey3_lp])
+                                       current_index=_settings.skey3_lp)
             rset = RadioSetting("skey3_lp", "RX End Tail", rs)
             basic.append(rset)
 
             # Menu 23: TAIL PHASE
             rs = RadioSettingValueList(TAILPHASE_LIST,
-                                       TAILPHASE_LIST[_settings.rxendtail])
+                                       current_index=_settings.rxendtail)
             rset = RadioSetting("rxendtail", "Tail Phase", rs)
             basic.append(rset)
 
@@ -1344,14 +1353,49 @@ class RT470XRadio(RT470LRadio):
                          ]
 
     _fingerprint = _fingerprint_pcb1 + _fingerprint_pcb2
-
     RT470X_ORIG = False
-
     VALID_BANDS = [(100000000, 136000000),
                    (136000000, 200000000),
                    (200000000, 300000000),
                    (300000000, 400000000),
                    (400000000, 560000000)]
+    _AIRBAND = (118000000, 136000000)
+
+    def get_features(self):
+        rf = super().get_features()
+        rf.valid_modes.append('AM')
+        rf.valid_bands = [(18000000, 1000000000)]
+        return rf
+
+    def validate_memory(self, mem):
+        msgs = []
+        in_range = chirp_common.in_range
+        if in_range(mem.freq, [self._AIRBAND]) and not mem.mode == 'AM':
+            msgs.append(chirp_common.ValidationWarning(
+                _('Frequency in this range requires AM mode')))
+        if not in_range(mem.freq, [self._AIRBAND]) and mem.mode == 'AM':
+            msgs.append(chirp_common.ValidationWarning(
+                _('Frequency in this range must not be AM mode')))
+        return msgs + super().validate_memory(mem)
+
+    def get_memory(self, number):
+        mem = super().get_memory(number)
+        if chirp_common.in_range(mem.freq, [self._AIRBAND]):
+            mem.mode = 'AM'
+        return mem
+
+
+@directory.register
+class RT470XPlusRadio(RT470XRadio):
+    """Radtel RT-470X Plus BT"""
+    VENDOR = "Radtel"
+    MODEL = "RT-470X_BT"
+    RT470X_ORIG = False  # BT fingerprint will fall automatically here
+
+    # BT version
+    _fingerprint_bt = [b"\x01\x36\x01\x80\x04\x00\x05\x20"  # fw v0.15
+                       ]
+    _fingerprint = _fingerprint_bt
 
 
 @directory.register
@@ -1424,7 +1468,7 @@ class A36plusRadio(JC8810base):
 
     # ==========
     # Notice to developers:
-    # The A36plus support in this driver is currently based upon v1.22
+    # The A36plus support in this driver is currently based upon v1.26
     # firmware.
     # ==========
 
@@ -1443,6 +1487,7 @@ class A36plusRadio(JC8810base):
                     b"\x00\x00\x00\x5A\x00\x20\x08\x05",  # fw 1.18
                     b"\x00\x00\x00\x9E\x00\x20\x0C\x05",  # fw 1.22
                     b"\x00\x00\x00\xFA\x00\x20\x40\x05",  # fw 1.4
+                    b"\x00\x00\x00\x9C\x00\x20\x04\x05",  # fw 1.26
                     ]
 
     _ranges = [

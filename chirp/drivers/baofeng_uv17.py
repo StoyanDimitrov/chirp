@@ -75,7 +75,7 @@ def _download(radio):
     status.msg = "Cloning from radio..."
     radio.status_fn(status)
 
-    for block_number in radio.BLOCK_ORDER:
+    for block_number in radio.BLOCK_O_READ:
         if block_number not in memory_map:
             # Memory block not found.
             LOG.error('Block %i (0x%x) not in memory map: %s',
@@ -158,6 +158,10 @@ class UV17(baofeng_uv17Pro.UV17Pro):
 
     MODES = ["FM", "NFM"]
     BLOCK_ORDER = [16, 17, 18, 19,  24, 25, 26, 4, 6]
+
+    # Add extra read blocks (e.g. calibration block 2) to the end here:
+    BLOCK_O_READ = list(BLOCK_ORDER)
+
     MEM_TOTAL = 0x9000
     WRITE_MEM_TOTAL = 0x9000
     BLOCK_SIZE = 0x40
@@ -179,6 +183,7 @@ class UV17(baofeng_uv17Pro.UV17Pro):
                 (b"\x06", 1)]
     _fingerprint = b"\x06" + b"UV15999"
     _scode_offset = 1
+    _mem_positions = ()
 
     _tri_band = False
     POWER_LEVELS = [chirp_common.PowerLevel("Low", watts=1.00),
@@ -367,18 +372,19 @@ class UV17(baofeng_uv17Pro.UV17Pro):
             val = _mem.settings.powersave
         rs = RadioSetting("settings.powersave", "Battery Saver",
                           RadioSettingValueList(
-                              LIST_SAVE, LIST_SAVE[val]))
+                              LIST_SAVE, current_index=val))
         basic.append(rs)
 
         rs = RadioSetting("settings.scanmode", "Scan Mode",
                           RadioSettingValueList(
                               LIST_SCANMODE,
-                              LIST_SCANMODE[_mem.settings.scanmode]))
+                              current_index=_mem.settings.scanmode))
         basic.append(rs)
 
-        rs = RadioSetting("settings.dtmfst", "DTMF Sidetone",
-                          RadioSettingValueList(LIST_DTMFST, LIST_DTMFST[
-                              _mem.settings.dtmfst]))
+        rs = RadioSetting(
+            "settings.dtmfst", "DTMF Sidetone",
+            RadioSettingValueList(
+                LIST_DTMFST, current_index=_mem.settings.dtmfst))
         basic.append(rs)
 
         rs = RadioSetting("settings.fmenable", "Enable FM radio",
@@ -482,9 +488,17 @@ class UV17(baofeng_uv17Pro.UV17Pro):
         _mem.set_raw(b"\x00" * 16)
 
         _namelength = self.get_features().valid_name_length
-        _nam.name = mem.name.ljust(_namelength, '\x00')
+        _nam.name = mem.name[:_namelength].ljust(11, '\x00')
 
         self.set_memory_common(mem, _mem)
+
+    def get_features(self):
+        rf = super().get_features()
+        rf.has_bank = False
+        return rf
+
+    def get_mapping_models(self):
+        return []
 
 
 @directory.register

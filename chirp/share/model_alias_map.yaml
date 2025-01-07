@@ -13,6 +13,8 @@ Baiston:
 - alt: Baofeng BF-888
   model: BST-2100
 Baofeng/Pofung:
+- alt: 5RM
+  model: Baofeng AR-5RM
 - alt: BF-1901
   model: Baofeng BF-1902
 - alt: BF-1901
@@ -25,6 +27,10 @@ Baofeng/Pofung:
   model: AR-152
 - alt: UV-5R
   model: B-580T
+- alt: UV-17Pro
+  model: UV-17R
+- alt: UV-17R-Plus
+  model: UV-17M
 - alt: UV-25
   model: BF-18H
 - alt: UV-25
@@ -99,7 +105,7 @@ Baofeng/Pofung:
   model: P11UV
 - alt: Radioddity UV-5G
   model: UV-5G
-- alt: Baofeng GM-5RH
+- alt: Radioddity UV-5G Plus
   model: UV-5G Plus
 - alt: BF-F8HP
   model: UV-5R HTQ
@@ -179,6 +185,9 @@ Baofeng/Pofung:
   variant: 'tri-band: '
 - alt: UV-82HP
   model: UV-X9
+BTECH:
+- alt: Baofeng BF-F8HP-PRO
+  model: BF-F8HP-PRO
 Cignus:
 - alt: Baofeng UV-5R
   model: UV-85
@@ -271,12 +280,16 @@ TIDRADIO:
   model: BF-F8TD
 - alt: Baofeng UV-82HP
   model: UV-82
+- alt: Baofeng BF-888
+  model: TD-V2
 TXQ:
 - alt: Abbree AR-63
   model: G63
 TYT:
 - alt: Explorer QRZ-1
   model: QRZ-1
+- alt: TH-7800
+  model: TH-7900
 Tacklife:
 - alt: Radioddity R2
   model: MTR01

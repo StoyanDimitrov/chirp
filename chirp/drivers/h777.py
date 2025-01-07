@@ -499,7 +499,7 @@ class H777Radio(chirp_common.CloneModeRadio):
         rs = RadioSetting("voicelanguage", "Voice language",
                           RadioSettingValueList(
                               VOICE_LIST,
-                              VOICE_LIST[_settings.voicelanguage]))
+                              current_index=_settings.voicelanguage))
         basic.append(rs)
 
         rs = RadioSetting("scan", "Scan",
@@ -510,8 +510,8 @@ class H777Radio(chirp_common.CloneModeRadio):
             rs = RadioSetting("settings2.scanmode", "Scan mode",
                               RadioSettingValueList(
                                   self.SCANMODE_LIST,
-                                  self.SCANMODE_LIST[
-                                      self._memobj.settings2.scanmode]))
+                                  current_index=(
+                                      self._memobj.settings2.scanmode)))
             basic.append(rs)
 
         rs = RadioSetting("vox", "VOX",
@@ -539,7 +539,7 @@ class H777Radio(chirp_common.CloneModeRadio):
             rs = RadioSetting("alarm", "Alarm",
                               RadioSettingValueList(
                                     self.ALARM_LIST,
-                                    self.ALARM_LIST[_settings.alarm]))
+                                    current_index=_settings.alarm))
         else:
             rs = RadioSetting("alarm", "Alarm",
                               RadioSettingValueBoolean(_settings.alarm))
@@ -571,15 +571,15 @@ class H777Radio(chirp_common.CloneModeRadio):
             rs = RadioSetting("settings2.sidekeyfunction", "Side key function",
                               RadioSettingValueList(
                                   self.SIDEKEYFUNCTION_LIST,
-                                  self.SIDEKEYFUNCTION_LIST[
-                                      self._memobj.settings2.sidekeyfunction]))
+                                  current_index=(
+                                      self._memobj.settings2.sidekeyfunction)))
             basic.append(rs)
 
-        rs = RadioSetting("settings2.timeouttimer", "Timeout timer",
-                          RadioSettingValueList(
-                              TIMEOUTTIMER_LIST,
-                              TIMEOUTTIMER_LIST[
-                                  self._memobj.settings2.timeouttimer]))
+        rs = RadioSetting(
+            "settings2.timeouttimer", "Timeout timer",
+            RadioSettingValueList(
+                TIMEOUTTIMER_LIST,
+                current_index=self._memobj.settings2.timeouttimer))
         basic.append(rs)
 
         return top
@@ -694,6 +694,19 @@ class H777PlusRadio(H777Radio):
 class BFM4Radio(H777Radio):
     VENDOR = "Baofeng"
     MODEL = "BF-M4"
+    ALIASES = []
+    _has_fm = False
+
+    @classmethod
+    def match_model(cls, filedata, filename):
+        # This model is only ever matched via metadata
+        return False
+
+
+@directory.register
+class MT8SRadio(H777Radio):
+    VENDOR = "MaxTalker"
+    MODEL = "MT-8S"
     ALIASES = []
     _has_fm = False
 

@@ -271,6 +271,9 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         "VFO2": -1,
     }
 
+    # Allow changing channel name length in radios that inherit from this class
+    NAME_LENGTH = 5
+
     _memsize = 0x1000
 
     @classmethod
@@ -313,7 +316,7 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         rf.can_odd_split = True
         rf.valid_skips = ["", "S"]
         rf.valid_characters = CHARSET
-        rf.valid_name_length = 5
+        rf.valid_name_length = self.NAME_LENGTH
         rf.valid_tuning_steps = UVB5_STEPS
         rf.valid_bands = [(130000000, 175000000),
                           (220000000, 269000000),
@@ -483,7 +486,7 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         _mem.highpower = mem.power == POWER_LEVELS[1]
 
         if _nam:
-            for i in range(0, 5):
+            for i in range(0, self.NAME_LENGTH):
                 try:
                     _nam[i] = CHARSET.index(mem.name[i])
                 except IndexError:
@@ -499,43 +502,44 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         group = RadioSettings(basic)
 
         options = ["Time", "Carrier", "Search"]
-        rs = RadioSetting("scantype", "Scan Type",
-                          RadioSettingValueList(options,
-                                                options[_settings.scantype]))
+        rs = RadioSetting(
+            "scantype", "Scan Type",
+            RadioSettingValueList(
+                options, current_index=_settings.scantype))
         basic.append(rs)
 
         options = ["Off"] + ["%s min" % x for x in range(1, 8)]
         rs = RadioSetting("timeout", "Time Out Timer",
                           RadioSettingValueList(
-                              options, options[_settings.timeout]))
+                              options, current_index=_settings.timeout))
         basic.append(rs)
 
         options = ["A", "B"]
         rs = RadioSetting("freqmode_ab", "Frequency Mode",
                           RadioSettingValueList(
-                              options, options[_settings.freqmode_ab]))
+                              options, current_index=_settings.freqmode_ab))
         basic.append(rs)
 
         options = ["Frequency Mode", "Channel Mode"]
         rs = RadioSetting("workmode_a", "Radio Work Mode(A)",
                           RadioSettingValueList(
-                              options, options[_settings.workmode_a]))
+                              options, current_index=_settings.workmode_a))
         basic.append(rs)
 
         rs = RadioSetting("workmode_b", "Radio Work Mode(B)",
                           RadioSettingValueList(
-                              options, options[_settings.workmode_b]))
+                              options, current_index=_settings.workmode_b))
         basic.append(rs)
 
         options = ["Frequency", "Name", "Channel"]
         rs = RadioSetting("mdf_a", "Display Format(F1)",
                           RadioSettingValueList(
-                              options, options[_settings.mdf_a]))
+                              options, current_index=_settings.mdf_a))
         basic.append(rs)
 
         rs = RadioSetting("mdf_b", "Display Format(F2)",
                           RadioSettingValueList(
-                              options, options[_settings.mdf_b]))
+                              options, current_index=_settings.mdf_b))
         basic.append(rs)
 
         rs = RadioSetting("mem_chan_a", "Mem Channel (A)",
@@ -551,7 +555,7 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         options = ["Off", "BOT", "EOT", "Both"]
         rs = RadioSetting("pttid", "PTT-ID",
                           RadioSettingValueList(
-                              options, options[_settings.pttid]))
+                              options, current_index=_settings.pttid))
         basic.append(rs)
 
         dtmfchars = "0123456789ABCD*#"
@@ -583,19 +587,20 @@ class BaofengUVB5(chirp_common.CloneModeRadio,
         options = ["Frequency Mode", "Channel Mode"]
         rs = RadioSetting("workmode_fm", "FM Work Mode",
                           RadioSettingValueList(
-                              options, options[_settings.workmode_fm]))
+                              options, current_index=_settings.workmode_fm))
         basic.append(rs)
 
         options = ["Current Frequency", "F1 Frequency", "F2 Frequency"]
         rs = RadioSetting("txtdr", "Dual Standby TX Priority",
                           RadioSettingValueList(options,
-                                                options[_settings.txtdr]))
+                                                current_index=_settings.txtdr))
         basic.append(rs)
 
         options = ["English", "Chinese"]
-        rs = RadioSetting("language", "Language",
-                          RadioSettingValueList(options,
-                                                options[_settings.language]))
+        rs = RadioSetting(
+            "language", "Language",
+            RadioSettingValueList(
+                options, current_index=_settings.language))
         basic.append(rs)
 
         rs = RadioSetting("tdr", "Dual Standby",
